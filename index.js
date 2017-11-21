@@ -5,20 +5,18 @@ let compiledContract
 window.onload = function () {
   document.getElementById('versions').onchange = loadSolcVersion
 
-  if (typeof BrowserSolc == 'undefined') {
+  if (!BrowserSolc) {
     console.log('You have to load browser-solc.js in the page. We recommend using a <script> tag.')
     throw new Error()
   }
 
-  status('Loading Compiler Versions.')
+  status('Loading Compiler Versions...')
 
   BrowserSolc.getVersions(function (soljsonSources, soljsonReleases) {
     populateVersions(soljsonSources)
     setVersion(soljsonReleases['0.4.18'])
     loadSolcVersion()
   })
-
-  addCompileEvent()
 }
 
 function loadSolcVersion() {
@@ -27,6 +25,8 @@ function loadSolcVersion() {
     status('Solc loaded.')
     compiler = c
   })
+
+  addCompileEvent()
 }
 
 function getVersion() {
@@ -59,24 +59,24 @@ function addCompileEvent() {
 }
 
 function solcCompile() {
-  if (!compiler) return alert('Please select a compiler version.') 
+  if (!compiler) return alert('Please select a compiler version.')
 
   setCompileButtonState(true)
-  status('Compiling contract...')
+  status("Compiling contract...")
   compiledContract = compiler.compile(getSourceCode(), optimize)
 
   if (compiledContract) setCompileButtonState(false)
 
-  renderContractList()  
-  status('Compile Complete.')
+  renderContractList()
+  status("Compile Complete.")
 }
 
 function getSourceCode() {
-  return document.getElementById('source').value
+  return document.getElementById("source").value
 }
 
 function setCompileButtonState(state) {
-  document.getElementById('contract-compile').disabled = state
+  document.getElementById("contract-compile").disabled = state
 }
 
 function renderContractList() {
@@ -84,53 +84,60 @@ function renderContractList() {
   const { contracts } = compiledContract
 
   Object.keys(contracts).forEach((contract, index) => {
-    let contractLabel = `contract-id-${index}`
-    contractListContainer.appendChild(
-      createContractInfo(contracts[contract], contract, contractLabel)
-    )
-    
-    attachDetailsEventHandler(contract, contracts[contract], contractLabel)
+    const label = `contract-id-${index}`
+    const gas = contracts[contract].gasEstimates.creation
+
+    createContractInfo(gas, contract, label, function (el) {
+      contractListContainer.appendChild(el)
+      const btnContainer = document.getElementById(label)
+
+      btnContainer.appendChild(
+        buttonFactory('primary', contract, contracts[contract], 'details')
+      )
+    })
   })
 }
 
-function createContractInfo(contract, contractName, label) {
+function createContractInfo(gas, contractName, label, callback) {
   const el = document.createElement('DIV')
 
   el.innerHTML = `
     <div class="mui-panel">
-      <div class="mui-row">
-        <div class="mui-col-md-4">
+      <div id="${label}" class="mui-row">
+        <div class="mui-col-md-3">
           Contract Name: <strong>${contractName.substring(1, contractName.length)}</strong>
         </div>
         <div class="mui-col-md-3">
           Gas Estimate: <strong style="color: green;">
-            ${sumArrayOfInts(contract.gasEstimates.creation)}
+            ${sumArrayOfInts(gas)}
           </strong>
-        </div>
-        <div class="mui-col-md-5">
-          <button
-            id="${label}"
-            class="mui-btn mui-btn--small mui-btn--primary mui-btn--raised"
-            style="float: right;" 
-            >
-              Details
-          </button>
         </div>
       </div>
     </div>
   `
 
-  return el
+  callback(el)
 }
 
 function sumArrayOfInts(array) {
   return array.reduce((acc, el) => (acc += el), 0)
 }
 
-function attachDetailsEventHandler(name, contract, label) {
-  document
-    .getElementById(label)
-    .onclick = () => renderContractDetails(name, contract)
+function buttonFactory(color, contractName, contract, type) {
+  const btn = document.createElement('BUTTON')
+  const btnContainer = document.createElement('DIV')
+
+  btn.className = `mui-btn mui-btn--small mui-btn--${color} mui-btn--raised"`
+  btn.innerText = type
+  btn.addEventListener('click', () => type === 'details'
+    ? renderContractDetails(contractName, contract)
+    : 'DEPLOY BUTTON'
+  )
+
+  btnContainer.className = 'mui-col-md-3'
+  btnContainer.appendChild(btn)
+
+  return btnContainer
 }
 
 function renderContractDetails(name, contract) {
