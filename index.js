@@ -1,3 +1,12 @@
+/* code for part 2 */
+if (typeof web3 !== 'undefined') {
+  web3 = new Web3(web3.currentProvider)
+} else {
+  // set the provider you want from Web3.providers
+  web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"))
+}
+// -------------------------- Code for part 2 above -----------------------
+
 let compiler
 let optimize = 1
 let compiledContract
@@ -27,6 +36,7 @@ function loadSolcVersion() {
   })
 
   addCompileEvent()
+  getAccounts()
 }
 
 function getVersion() {
@@ -84,7 +94,7 @@ function renderContractList() {
   const { contracts } = compiledContract
 
   Object.keys(contracts).forEach((contract, index) => {
-    const label = `contract-id-${index}`
+    const label = `contract-id-${contract}-${Math.random()}`
     const gas = contracts[contract].gasEstimates.creation
 
     createContractInfo(gas, contract, label, function (el) {
@@ -93,6 +103,10 @@ function renderContractList() {
 
       btnContainer.appendChild(
         buttonFactory('primary', contract, contracts[contract], 'details')
+      )
+
+      btnContainer.appendChild(
+        buttonFactory('danger', contract, contracts[contract], 'deploy')
       )
     })
   })
@@ -131,7 +145,7 @@ function buttonFactory(color, contractName, contract, type) {
   btn.innerText = type
   btn.addEventListener('click', () => type === 'details'
     ? renderContractDetails(contractName, contract)
-    : 'DEPLOY BUTTON'
+    : deployContractEvent(contractName, contract) // code for part 2
   )
 
   btnContainer.className = 'mui-col-md-3'
@@ -183,4 +197,242 @@ function renderFunctionWithHashes(functionHashes) {
     ))
 
   return functionHashContainer
+}
+
+function getAccounts() {
+  const ethAccount = web3.eth.accounts[0]
+
+  return document
+    .getElementById('account-addresses')
+    .innerHTML = `<div>
+        Account: ${ethAccount} 
+        <br />
+        Balance: ${balanceInEth(ethAccount)}
+      </div>
+    `
+}
+
+function balanceInEth(address) {
+  return web3.fromWei(web3.eth.getBalance(address).toString(), 'ether')
+}
+
+// ================================================================================================
+
+function deployContractEvent(contractName, contract) {
+  const comfirmMsg = `
+    Contract: ${contractName.substring(1)}
+    Network: ${currentNetwork()}
+
+    Deploy?
+  `
+  if (!confirm(comfirmMsg)) return
+
+  const { bytecode } = contract
+  const abi = contract.interface
+  const newContract = web3.eth.contract(JSON.parse(abi))
+
+  newContract.new(
+    { from: web3.eth.accounts[0], data: bytecode, gas: 1000000 },
+    newContractCallback(contractName)
+  )
+}
+
+function currentNetwork() {
+  const mainnet = '0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3'
+  const testnet = '0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d'
+  const currentNetwork = web3.eth.getBlock(0).hash
+
+  switch (currentNetwork) {
+    case mainnet:
+      return 'Main Net'
+    case testnet:
+      return 'Ropsten Network'
+    default:
+      return 'TestRPC Testnet'
+  }
+}
+
+function newContractCallback(contractName) {
+  return (err, deployedContract) => {
+    getAccounts()
+    if (!err) {
+      !deployedContract.address
+        ? status(`Deploying contract....`)
+        : renderContract(deployedContract, contractName)
+    }
+  }
+}
+
+function renderContract(contract, contractName) {
+  status(`Contract Deployed.`)
+  const { transactionHash, address } = contract
+
+  web3.eth.getTransaction(transactionHash, function(err, transaction) {
+    if (!err) { 
+      const { blockNumber } = transaction
+      const contractDetails = { contractName, address, blockNumber }
+      const props = { ...transaction, ...contract}
+
+      createContractPanel(contractDetails, function(panel) {
+        createContract(props, contractName, panel)
+      })
+    }  
+  })
+}
+
+function createContractPanel(contract, callback) {
+  const div = document.createElement('DIV')
+  div.className = 'mui-panel'
+  div.innerHTML = `
+    <h3>
+      <strong>Contract: </strong> 
+      ${contract.contractName}
+    </h3>
+    <p>
+      <strong>Block Number: </strong>
+      ${contract.blockNumber}
+    </p>
+    <p>
+      <strong>Contract Balance: </strong>
+      ${balanceInEth(contract.address)}
+    </p>
+      <strong>Contract Address: </strong>
+      ${contract.address}
+    </p>
+  `
+
+  callback(div)
+}
+
+function createContract(contract, contractName, panel) {
+  createPropsContainers(panel, function(propsList, hashList, functionList) {
+    Object.entries(contract).forEach(contractProps => {
+      console.log('ENTRIES :: ==>', contractProps)
+      const params = {
+        key: contractProps[0],
+        value: contractProps[1],
+        hashList,
+        propsList,
+        functionList,
+      }
+      const container = categorizeContractProps(params)
+
+      if(!filterProps(contractProps[0])) {
+        container.append(
+          createContractElement(contractProps, contractName, container)
+        )
+      }
+    })
+  })
+}
+
+function createPropsContainers(panel, callback) {
+  const propsList = createPanelContainer('DIV', 'mui-row', 'marginLeft', 0)
+  const hashList = createPanelContainer('UL', 'mui-panel', 'listStyleType', 'none')
+  const functionList = createPanelContainer('UL', 'mui-row', 'listStyleType', 'none')
+  functionList.innerHTML = '<H3><strong>Contract Functions: </strong></H3>'
+
+  document.getElementById('contractFunction').appendChild(panel)
+
+  panel.append(propsList)
+  panel.append(hashList)
+  panel.append(functionList)
+
+  callback(propsList, hashList, functionList)
+}
+
+function createPanelContainer(element, className, styleType, styleValue) {
+  const list = document.createElement(element)
+  list.className = className
+  list.style[styleType] = styleValue
+
+  return list
+}
+
+function categorizeContractProps(params) {
+  const hashNames = {
+    'hash': 'hash',
+    'blockHash': 'blockHash',
+    'input': 'input',
+    'from': 'from',
+  }
+
+  if (hashNames[params.key]) {
+    return params.hashList
+  }
+
+  if (typeof params.value === 'function') {
+    return params.functionList
+  }
+
+  return params.propsList
+}
+
+function filterProps(prop) {
+  const evmResponses = {
+    '_eth': '_eth',
+    'abi': 'abi',
+    'allEvents': 'allEvents',
+    'to': 'to',
+    'value': 'value',
+    'blockNumber': 'blockNumber',
+    'address': 'address',
+    'transactionHash': 'transactionHash',
+  }
+
+  return evmResponses[prop]
+}
+
+function createContractElement(contractFunc, contractName, container) {
+  switch (typeof contractFunc[1]) {
+    case 'function':
+      return createContractFunction(contractFunc, container)
+    default:
+      return createContractPropType(contractFunc, 'P')
+  }
+}
+
+function createContractFunction(contractFunc, container) {
+  const btn = document.createElement('BUTTON')
+  btn.innerText = contractFunc[0]
+  btn.className = 'mui-btn mui-btn--primary mui-col-md-2'
+  btn.addEventListener('click', () => {
+    const div = document.createElement('DIV')
+    div.className = 'mui-col-md-3'
+    div.innerHTML = `
+      <strong>Return Value:</strong> "${contractFunc[1]()}"
+    `
+
+    container.appendChild(div)
+  })
+
+  return btn
+}
+
+function createContractPropType(contractProp, element) {
+  const propName = contractProp[0]
+  const hashesNames = {
+    'hash': 'hash', 
+    'blockHash': 'blockHash',
+    'input': 'input',
+    'from': 'from',
+  }
+  
+  if (hashesNames[propName]) { 
+    return renderPropType(propName, contractProp[1], 'LI', '')
+  } else {
+    return renderPropType(propName, contractProp[1], 'P', 'mui-col-md-2 mui-panel')
+  }
+}
+
+function renderPropType(hashName, hashValue, element, className) {
+  const newElement = document.createElement(element)
+  const value = hashName === 'input' 
+    ? `<br /><textarea style="width: 1000px;">${hashValue}</textarea>`
+    : hashValue
+    
+  newElement.className = className
+  newElement.innerHTML = `<br /><strong>${hashName}</strong>: ${value}`
+
+  return newElement  
 }
