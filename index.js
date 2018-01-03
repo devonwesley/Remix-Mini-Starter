@@ -19,6 +19,7 @@ window.onload = function () {
   }
 
   status('Loading Compiler Versions...')
+  getAccounts()
 
   BrowserSolc.getVersions(function (soljsonSources, soljsonReleases) {
     populateVersions(soljsonSources)
@@ -220,7 +221,6 @@ function deployContractEvent(name, contract) {
   const comfirmMsg = `
     Contract: ${name.substring(1)}
     Network: ${currentNetwork()}
-
     Confirm to deploy with these settings.
   `
   if (!confirm(comfirmMsg)) return
@@ -433,3 +433,4 @@ function createContractHash(name, hash, tag, className) {
 
   return el  
 }
+
